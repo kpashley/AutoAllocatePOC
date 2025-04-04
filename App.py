@@ -69,6 +69,7 @@ st.title("🚢 Ship Allocation Tool")
 uploaded_files = st.file_uploader("Upload 3 Excel files: Preferred Sailing, Ship Availability, Acceptable Classes", accept_multiple_files=True, type=['xlsx'])
 
 if len(uploaded_files) == 3:
+    
     preferred_sailing_df = pd.read_excel(uploaded_files[0])
     ship_availability_df = pd.read_excel(uploaded_files[1])
     acceptable_classes_df = pd.read_excel(uploaded_files[2])
