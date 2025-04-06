@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import time
 
 def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classes_df, months, suez_closed, panama_closed, congestion_delays):
     seen_ships = set()
@@ -46,10 +47,9 @@ def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classe
                     (preferred_sailing_df['Starting Region'] == assigned_lob[1]) & 
                     (preferred_sailing_df['Ending Region'] == assigned_lob[2])
                 ]['Avg Voyage days']
-                
+
                 avg_voyage_days = int(voyage_days.values[0]) if not voyage_days.empty else 60
-                
-                # Adjust voyage days based on closures and congestion
+
                 if suez_closed and 'Suez' in lob_key:
                     avg_voyage_days += 14
                 if panama_closed and 'Panama' in lob_key:
@@ -58,7 +58,7 @@ def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classe
 
                 next_available_month_index = min(months.index(month) + (avg_voyage_days // 30), len(months) - 1)
                 next_available_month = months[next_available_month_index]
-                
+
                 allocated_ships.append({
                     'Month': month,
                     'vesselcode': ship_name,
@@ -67,7 +67,7 @@ def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classe
                     'Ending Region': assigned_lob[2],
                     'Voyage Days': avg_voyage_days
                 })
-                
+
                 lob_demand[assigned_lob] -= 1
                 remaining_unassigned_ships.discard(ship_name)
                 ship_status[ship_name] = {'end_region': assigned_lob[2], 'return_month': next_available_month}
@@ -77,34 +77,63 @@ def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classe
 
     return pd.DataFrame(all_allocations)
 
-# Streamlit App
-st.title("🚢 Ship Allocation Tool")
 
-uploaded_files = st.file_uploader("Upload 3 Excel files: Preferred Sailing, Ship Availability, Acceptable Classes", accept_multiple_files=True, type=['xlsx'])
+# ---------- Streamlit App Starts Here ----------
+
+st.set_page_config(page_title="Ship Allocation Tool", layout="wide")
+st.title("🚢 Smart Ship Allocation POC")
+
+st.markdown("Upload the required data files below to get started:")
+
+# Always visible
+suez_closed = st.checkbox("🚧 Suez Canal is closed")
+panama_closed = st.checkbox("🚧 Panama Canal is closed")
+
+# Show port congestion sliders before file upload
+st.subheader("⚓ Port Congestion Delays (Optional)")
+congestion_delays = {}
+placeholder_lobs = ['Asia-Europe', 'India-Gulf', 'TPW', 'Panama Loop', 'Suez East', 'Suez West']
+with st.expander("🔧 Adjust Congestion Days"):
+    cols = st.columns(3)
+    for i, lob in enumerate(placeholder_lobs):
+        with cols[i % 3]:
+            congestion_delays[lob] = st.slider(f"{lob}", 0, 30, 0, key=f"delay_{lob}")
+
+uploaded_files = st.file_uploader("📤 Upload 3 Excel files (Preferred Sailing, Ship Availability, Acceptable Classes)", accept_multiple_files=True, type=['xlsx'])
 
 if len(uploaded_files) == 3:
     preferred_sailing_df = pd.read_excel(uploaded_files[0])
     ship_availability_df = pd.read_excel(uploaded_files[1])
     acceptable_classes_df = pd.read_excel(uploaded_files[2])
-    
     acceptable_classes_df = acceptable_classes_df.set_index('LOB')['Class'].to_dict()
-    months = ['2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06']
-    
-    # User inputs
-    suez_closed = st.checkbox("🚧 Suez Canal is closed")
-    panama_closed = st.checkbox("🚧 Panama Canal is closed")
+
+    # Replace congestion delay placeholders with actual LOBs
     congestion_delays = {}
-    
-    st.write("### Adjust Port Congestion Delays")
-    for lob in preferred_sailing_df['LOB'].unique():
-        congestion_delays[lob] = st.slider(f"Extra days for {lob}", 0, 30, 0)
-    
+    all_lobs = preferred_sailing_df['LOB'].unique()
+    st.subheader("📊 Confirm Port Congestion Delays")
+    congestion_cols = st.columns(3)
+    for i, lob in enumerate(all_lobs):
+        with congestion_cols[i % 3]:
+            congestion_delays[lob] = st.slider(f"{lob}", 0, 30, 0, key=f"real_delay_{lob}")
+
+    months = ['2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06']
+
     if st.button("🚀 Run Allocation"):
-        allocation_result = allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classes_df, months, suez_closed, panama_closed, congestion_delays)
-        
+        with st.spinner("⏳ Allocating ships. Please wait..."):
+            time.sleep(1)  # Simulate delay
+            allocation_result = allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classes_df, months, suez_closed, panama_closed, congestion_delays)
+
         if not allocation_result.empty:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"Ship_Allocation_{timestamp}.xlsx"
             allocation_result.to_excel(filename, index=False)
-            st.success("✅ Allocation Completed!")
-            st.download_button(label="📥 Download Allocation File", data=open(filename, "rb"), file_name=filename)
+
+            st.success("✅ Allocation completed successfully!")
+            st.dataframe(allocation_result)
+
+            with open(filename, "rb") as f:
+                st.download_button(label="📥 Download Allocation Excel File", data=f, file_name=filename, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        else:
+            st.warning("⚠️ No allocations could be made. Please check your data.")
+else:
+    st.info("👆 Please upload all three required Excel files to begin.")
