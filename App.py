@@ -91,11 +91,17 @@ panama_closed = st.checkbox("🚧 Panama Canal is closed")
 
 # Show port congestion sliders before file upload
 st.subheader("⚓ Port Congestion Delays (Optional)")
+
 congestion_delays = {}
-placeholder_lobs = ['Asia-Europe', 'India-Gulf', 'TPW', 'Panama Loop', 'Suez East', 'Suez West']
+actual_lobs = [
+    'TPW', 'HBR-C', 'LAS-ES', 'EXP-A', 'LAS-EN', 'HBR-U Suez', 'TAW', 'AGE',
+    'TAE', 'UMR-E', 'BAJ', 'GIR-C', 'UMR-W', 'AAG', 'JAB', 'ESA-S',
+    'GIR-U', 'HBR-U Panama', 'GIP', 'PACS'
+]
+
 with st.expander("🔧 Adjust Congestion Days"):
     cols = st.columns(3)
-    for i, lob in enumerate(placeholder_lobs):
+    for i, lob in enumerate(actual_lobs):
         with cols[i % 3]:
             congestion_delays[lob] = st.slider(f"{lob}", 0, 30, 0, key=f"delay_{lob}")
 
@@ -106,15 +112,6 @@ if len(uploaded_files) == 3:
     ship_availability_df = pd.read_excel(uploaded_files[1])
     acceptable_classes_df = pd.read_excel(uploaded_files[2])
     acceptable_classes_df = acceptable_classes_df.set_index('LOB')['Class'].to_dict()
-
-    # Replace congestion delay placeholders with actual LOBs
-    congestion_delays = {}
-    all_lobs = preferred_sailing_df['LOB'].unique()
-    st.subheader("📊 Confirm Port Congestion Delays")
-    congestion_cols = st.columns(3)
-    for i, lob in enumerate(all_lobs):
-        with congestion_cols[i % 3]:
-            congestion_delays[lob] = st.slider(f"{lob}", 0, 30, 0, key=f"real_delay_{lob}")
 
     months = ['2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06']
 
