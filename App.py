@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import datetime
 import time
+import plotly.express as px
+
 
 def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classes_df, months, suez_closed, panama_closed, congestion_delays):
     seen_ships = set()
@@ -85,13 +87,10 @@ st.title("🚢 Smart Ship Allocation POC")
 
 st.markdown("Upload the required data files below to get started:")
 
-# Always visible
 suez_closed = st.checkbox("🚧 Suez Canal is closed")
 panama_closed = st.checkbox("🚧 Panama Canal is closed")
 
-# Show port congestion sliders before file upload
 st.subheader("⚓ Port Congestion Delays (Optional)")
-
 congestion_delays = {}
 actual_lobs = [
     'TPW', 'HBR-C', 'LAS-ES', 'EXP-A', 'LAS-EN', 'HBR-U Suez', 'TAW', 'AGE',
@@ -105,7 +104,7 @@ with st.expander("🔧 Adjust Congestion Days"):
         with cols[i % 3]:
             congestion_delays[lob] = st.slider(f"{lob}", 0, 30, 0, key=f"delay_{lob}")
 
-uploaded_files = st.file_uploader("📤 Upload 3 Excel files (Preferred Sailing, Ship Availability, Acceptable Classes)", accept_multiple_files=True, type=['xlsx'])
+uploaded_files = st.file_uploader("📄 Upload 3 Excel files (Preferred Sailing, Ship Availability, Acceptable Classes)", accept_multiple_files=True, type=['xlsx'])
 
 if len(uploaded_files) == 3:
     preferred_sailing_df = pd.read_excel(uploaded_files[0])
@@ -117,19 +116,59 @@ if len(uploaded_files) == 3:
 
     if st.button("🚀 Run Allocation"):
         with st.spinner("⏳ Allocating ships. Please wait..."):
-            time.sleep(1)  # Simulate delay
+            time.sleep(1)
             allocation_result = allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classes_df, months, suez_closed, panama_closed, congestion_delays)
 
         if not allocation_result.empty:
+            st.success("✅ Allocation completed successfully!")
+
+            # Chart 1: Total per LOB
+            st.subheader("📊 Number of Allocations per LOB (Overall)")
+            lob_count = allocation_result['Assigned_LOB'].value_counts().reset_index()
+            lob_count.columns = ['LOB', 'Count']
+            fig_bar = px.bar(lob_count, x='LOB', y='Count', text='Count', color='LOB')
+            fig_bar.update_traces(texttemplate='%{text:.0f}', textposition='outside')
+            fig_bar.update_layout(yaxis=dict(tickformat='d'), showlegend=False)
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+            # Chart 2: Per LOB per Month
+            st.subheader("📅 Number of Allocations per LOB per Month")
+            lob_month_counts = allocation_result.groupby(['Month', 'Assigned_LOB']).size().reset_index(name='Count')
+            fig_lob_month = px.bar(lob_month_counts, x='Month', y='Count', color='Assigned_LOB', barmode='group',
+                                   text='Count', title="Allocations per LOB per Month")
+            fig_lob_month.update_traces(texttemplate='%{text:.0f}', textposition='outside')
+            fig_lob_month.update_layout(yaxis=dict(tickformat='d'))
+            st.plotly_chart(fig_lob_month, use_container_width=True)
+
+            # Chart 3: Region-to-Region routes
+            st.subheader("🌍 Region-to-Region Allocation Counts")
+            route_counts = allocation_result.groupby(['Starting Region', 'Ending Region']).size().reset_index(name='Count')
+            route_counts['Route'] = route_counts['Starting Region'] + " ➞ " + route_counts['Ending Region']
+            fig_routes = px.bar(route_counts, x='Route', y='Count', text='Count')
+            fig_routes.update_traces(texttemplate='%{text:.0f}', textposition='outside')
+            fig_routes.update_layout(xaxis_tickangle=-45, yaxis=dict(tickformat='d'))
+            st.plotly_chart(fig_routes, use_container_width=True)
+
+            # Chart 4: Total Voyage Days
+            st.subheader("📈 Total Voyage Days per Month")
+            voyage_by_month = allocation_result.groupby('Month')['Voyage Days'].sum().reset_index()
+            fig_voy = px.line(voyage_by_month, x='Month', y='Voyage Days', markers=True)
+            fig_voy.update_traces(textposition="top center")
+            fig_voy.update_layout(yaxis=dict(tickformat='d'))
+            st.plotly_chart(fig_voy, use_container_width=True)
+
+            # Heatmap Table
+            st.subheader("🗺️ Heatmap: LOB vs Month Allocations")
+            pivot = allocation_result.pivot_table(index='Assigned_LOB', columns='Month', values='vesselcode', aggfunc='count').fillna(0).astype(int)
+            st.dataframe(pivot.style.format(precision=0).background_gradient(cmap='Blues'))
+
+            # Download
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"Ship_Allocation_{timestamp}.xlsx"
             allocation_result.to_excel(filename, index=False)
 
-            st.success("✅ Allocation completed successfully!")
-            st.dataframe(allocation_result)
-
             with open(filename, "rb") as f:
-                st.download_button(label="📥 Download Allocation Excel File", data=f, file_name=filename, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button(label="📅 Download Allocation Excel File", data=f, file_name=filename, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         else:
             st.warning("⚠️ No allocations could be made. Please check your data.")
 else:
