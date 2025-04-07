@@ -4,6 +4,7 @@ import datetime
 import time
 import plotly.express as px
 
+# ------------------ Ship Allocation Logic ------------------
 
 def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classes_df, months, suez_closed, panama_closed, congestion_delays):
     seen_ships = set()
@@ -16,6 +17,7 @@ def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classe
         available_ships_now = set(ship_availability_df[ship_availability_df['MonthYear'] == month]['vesselcode'])
         new_ships = available_ships_now - seen_ships
         seen_ships.update(available_ships_now)
+
         returned_ships = {ship for ship, details in ship_status.items() if details['return_month'] == month}
         available_ships = new_ships | returned_ships | unassigned_ships
         busy_ships = {ship for ship, details in ship_status.items() if details['return_month'] > month}
@@ -36,7 +38,7 @@ def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classe
         for ship_name, ship_region in available_ships_list:
             ship_class = ship_availability_df.loc[ship_availability_df['vesselcode'] == ship_name, 'Class'].values[0]
             assigned_lob = next((
-                key for key in sorted_lob_keys 
+                key for key in sorted_lob_keys
                 if key[1] == ship_region and lob_demand.get(key, 0) > 0 and
                 ship_class in acceptable_classes_df.get(key[0], [])
             ), None)
@@ -45,8 +47,8 @@ def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classe
                 lob_key = assigned_lob[0]
                 extra_days = congestion_delays.get(lob_key, 0)
                 voyage_days = preferred_sailing_df[
-                    (preferred_sailing_df['LOB'] == lob_key) & 
-                    (preferred_sailing_df['Starting Region'] == assigned_lob[1]) & 
+                    (preferred_sailing_df['LOB'] == lob_key) &
+                    (preferred_sailing_df['Starting Region'] == assigned_lob[1]) &
                     (preferred_sailing_df['Ending Region'] == assigned_lob[2])
                 ]['Avg Voyage days']
 
@@ -79,17 +81,17 @@ def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classe
 
     return pd.DataFrame(all_allocations)
 
-
-# ---------- Streamlit App Starts Here ----------
+# ------------------ Streamlit UI ------------------
 
 st.set_page_config(page_title="Ship Allocation Tool", layout="wide")
 st.title("🚢 Smart Ship Allocation POC")
-
 st.markdown("Upload the required data files below to get started:")
 
+# Canal closures
 suez_closed = st.checkbox("🚧 Suez Canal is closed")
 panama_closed = st.checkbox("🚧 Panama Canal is closed")
 
+# Congestion Delays
 st.subheader("⚓ Port Congestion Delays (Optional)")
 congestion_delays = {}
 actual_lobs = [
@@ -104,7 +106,11 @@ with st.expander("🔧 Adjust Congestion Days"):
         with cols[i % 3]:
             congestion_delays[lob] = st.slider(f"{lob}", 0, 30, 0, key=f"delay_{lob}")
 
-uploaded_files = st.file_uploader("📄 Upload 3 Excel files (Preferred Sailing, Ship Availability, Acceptable Classes)", accept_multiple_files=True, type=['xlsx'])
+# Uploads
+uploaded_files = st.file_uploader(
+    "📄 Upload 3 Excel files (Preferred Sailing, Ship Availability, Acceptable Classes)",
+    accept_multiple_files=True, type=['xlsx']
+)
 
 if len(uploaded_files) == 3:
     preferred_sailing_df = pd.read_excel(uploaded_files[0])
@@ -117,7 +123,15 @@ if len(uploaded_files) == 3:
     if st.button("🚀 Run Allocation"):
         with st.spinner("⏳ Allocating ships. Please wait..."):
             time.sleep(1)
-            allocation_result = allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classes_df, months, suez_closed, panama_closed, congestion_delays)
+            allocation_result = allocate_ships(
+                preferred_sailing_df,
+                ship_availability_df,
+                acceptable_classes_df,
+                months,
+                suez_closed,
+                panama_closed,
+                congestion_delays
+            )
 
         if not allocation_result.empty:
             st.success("✅ Allocation completed successfully!")
@@ -134,8 +148,7 @@ if len(uploaded_files) == 3:
             # Chart 2: Per LOB per Month
             st.subheader("📅 Number of Allocations per LOB per Month")
             lob_month_counts = allocation_result.groupby(['Month', 'Assigned_LOB']).size().reset_index(name='Count')
-            fig_lob_month = px.bar(lob_month_counts, x='Month', y='Count', color='Assigned_LOB', barmode='group',
-                                   text='Count', title="Allocations per LOB per Month")
+            fig_lob_month = px.bar(lob_month_counts, x='Month', y='Count', color='Assigned_LOB', barmode='group', text='Count')
             fig_lob_month.update_traces(texttemplate='%{text:.0f}', textposition='outside')
             fig_lob_month.update_layout(yaxis=dict(tickformat='d'))
             st.plotly_chart(fig_lob_month, use_container_width=True)
@@ -149,14 +162,6 @@ if len(uploaded_files) == 3:
             fig_routes.update_layout(xaxis_tickangle=-45, yaxis=dict(tickformat='d'))
             st.plotly_chart(fig_routes, use_container_width=True)
 
-            # Chart 4: Total Voyage Days
-            st.subheader("📈 Total Voyage Days per Month")
-            voyage_by_month = allocation_result.groupby('Month')['Voyage Days'].sum().reset_index()
-            fig_voy = px.line(voyage_by_month, x='Month', y='Voyage Days', markers=True)
-            fig_voy.update_traces(textposition="top center")
-            fig_voy.update_layout(yaxis=dict(tickformat='d'))
-            st.plotly_chart(fig_voy, use_container_width=True)
-
             # Heatmap Table
             st.subheader("🗺️ Heatmap: LOB vs Month Allocations")
             pivot = allocation_result.pivot_table(index='Assigned_LOB', columns='Month', values='vesselcode', aggfunc='count').fillna(0).astype(int)
@@ -166,9 +171,8 @@ if len(uploaded_files) == 3:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"Ship_Allocation_{timestamp}.xlsx"
             allocation_result.to_excel(filename, index=False)
-
             with open(filename, "rb") as f:
-                st.download_button(label="📅 Download Allocation Excel File", data=f, file_name=filename, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button("📅 Download Allocation Excel File", data=f, file_name=filename, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         else:
             st.warning("⚠️ No allocations could be made. Please check your data.")
 else:
