@@ -84,7 +84,7 @@ def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classe
 # ------------------ Streamlit UI ------------------
 
 st.set_page_config(page_title="Ship Allocation Tool", layout="wide")
-st.title("🚢 Smart Ship Allocation POC")
+st.title("🚢 Smart Ship Allocation")
 st.markdown("Upload the required data files below to get started:")
 
 # Canal closures
