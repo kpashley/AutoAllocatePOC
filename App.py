@@ -159,7 +159,7 @@ if len(uploaded_files) == 3:
             st.plotly_chart(fig_routes, use_container_width=True)
 
             # Heatmap Table
-            st.subheader("🗺️ Heatmap: LOB vs Month Allocations")
+            st.subheader("🗺️ Heatmap: LOB vs Month Allocation")
             pivot = allocation_result.pivot_table(index='Assigned_LOB', columns='Month', values='vesselcode', aggfunc='count').fillna(0).astype(int)
             st.dataframe(pivot.style.format(precision=0).background_gradient(cmap='Blues'))
 
