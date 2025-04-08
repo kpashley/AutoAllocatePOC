@@ -6,7 +6,7 @@ import plotly.express as px
 
 # ------------------ Ship Allocation Logic ------------------
 
-def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classes_df, months, suez_closed, panama_closed, congestion_delays):
+def allocate_ships(preferred_sailing_df, ship_availability_df, months, suez_closed, panama_closed, congestion_delays):
     seen_ships = set()
     ship_status = {}
     unassigned_ships = set()
@@ -36,19 +36,17 @@ def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classe
         sorted_lob_keys = sorted(lob_demand.keys(), key=lambda k: lob_demand[k], reverse=True)
 
         for ship_name, ship_region in available_ships_list:
-            ship_class = ship_availability_df.loc[ship_availability_df['vesselcode'] == ship_name, 'Class'].values[0]
             assigned_lob = next((
                 key for key in sorted_lob_keys
-                if key[1] == ship_region and lob_demand.get(key, 0) > 0 and
-                ship_class in acceptable_classes_df.get(key[0], [])
+                if key[1] == ship_region and lob_demand.get(key, 0) > 0
             ), None)
 
             if assigned_lob:
                 lob_key = assigned_lob[0]
                 extra_days = congestion_delays.get(lob_key, 0)
                 voyage_days = preferred_sailing_df[
-                    (preferred_sailing_df['LOB'] == lob_key) &
-                    (preferred_sailing_df['Starting Region'] == assigned_lob[1]) &
+                    (preferred_sailing_df['LOB'] == lob_key) & 
+                    (preferred_sailing_df['Starting Region'] == assigned_lob[1]) & 
                     (preferred_sailing_df['Ending Region'] == assigned_lob[2])
                 ]['Avg Voyage days']
 
@@ -69,7 +67,6 @@ def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classe
                     'Assigned_LOB': lob_key,
                     'Starting Region': assigned_lob[1],
                     'Ending Region': assigned_lob[2],
-                    'Voyage Days': avg_voyage_days
                 })
 
                 lob_demand[assigned_lob] -= 1
@@ -85,7 +82,7 @@ def allocate_ships(preferred_sailing_df, ship_availability_df, acceptable_classe
 
 st.set_page_config(page_title="Ship Allocation Tool", layout="wide")
 st.title("🚢 Smart Ship Allocation")
-st.markdown("Upload the required data files below to get started:")
+st.markdown("Upload the required files below to get started:")
 
 # Canal closures
 suez_closed = st.checkbox("🚧 Suez Canal is closed")
@@ -115,8 +112,8 @@ uploaded_files = st.file_uploader(
 if len(uploaded_files) == 3:
     preferred_sailing_df = pd.read_excel(uploaded_files[0])
     ship_availability_df = pd.read_excel(uploaded_files[1])
-    acceptable_classes_df = pd.read_excel(uploaded_files[2])
-    acceptable_classes_df = acceptable_classes_df.set_index('LOB')['Class'].to_dict()
+    # Acceptable Classes file is uploaded, but not used in logic
+    _ = pd.read_excel(uploaded_files[2])  # Placeholder
 
     months = ['2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06']
 
@@ -126,7 +123,6 @@ if len(uploaded_files) == 3:
             allocation_result = allocate_ships(
                 preferred_sailing_df,
                 ship_availability_df,
-                acceptable_classes_df,
                 months,
                 suez_closed,
                 panama_closed,
